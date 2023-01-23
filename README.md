@@ -1,2 +1,3 @@
 # NotC
- A programming language that is not C
+
+Small interpreted programming language that is not C.
