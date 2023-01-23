@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <ostream>
 
 class Token {
 public:
@@ -52,3 +53,13 @@ public:
     size_t line;
     size_t col;
 };
+
+const std::vector<std::string> TokenTypeStr = {
+    "(", ")", "{", "}", "->", ":", ";", 
+    "identifier", "0", "0.0", "\"string\"",
+    "def", "void", "int", "float", "str", "ret"
+};
+
+std::ostream &operator<<(std::ostream &os, Token::Type type) {
+    return os << TokenTypeStr[type];
+}
