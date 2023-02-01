@@ -201,6 +201,22 @@ tokens = lex(read_file("main.nc"))
 parser = Parser(tokens)
 root = parser.parse()
 del parser
-from pprint import pprint
-pprint(root)
-del pprint
+
+def debug(ast: Root) -> None:
+    from pprint import pprint, pformat
+    for id, stmt in enumerate(ast.program):
+        print(id, '|', end=" ")
+        if isinstance(stmt, Function):
+            print(stmt.type, stmt.symbol, "(", pformat(stmt.parameters), ")\n  |", end=" ")
+            pprint(stmt.body)
+            
+class Op(Enum):
+    LABEL = 5
+
+def generate(ast: Root, path: str) -> None:
+    with open(path, "w") as file:
+        for stmt in ast.program:
+            break
+
+debug(root)
+generate(root, "main.nco")

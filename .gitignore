@@ -36,3 +36,4 @@
 main
 __pycache__
 notc
+*.nco
