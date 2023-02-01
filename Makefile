@@ -8,3 +8,6 @@ comp:
 
 run: comp
 	./notc
+
+clean:
+	-rm ./notc
