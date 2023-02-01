@@ -1,12 +1,10 @@
-cc = clang++
-flags = -std=c++20 -g -O3 -std=c++20
-src = $(wildcard src/*.cpp)
+cc = clang
+flags = -std=c17 -g -O3
 
 all: comp
 	
-
 comp:
-	$(cc) $(flags) $(src)
+	clang -o notc -std=c17 -g -O3 notc.c
 
 run: comp
-	./a.out
+	./notc
