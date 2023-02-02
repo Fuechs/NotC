@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
+
 
 #define DEBUG_TRACE_EXECUTION
 
@@ -30,7 +32,32 @@ void *reallocate(void *pointer, size_t oldSize, size_t newSize) {
     return result;
 }
 
-typedef double Value;
+typedef enum ValueType_ENUM {
+    VAL_BOOL,
+    VAL_NULL,
+    VAL_NUMBER,
+} ValueType;
+
+// typedef double Value;
+
+typedef struct Value_STRUCT {
+    ValueType type;
+    union {
+        bool boolean;
+        double number;
+    } as;
+} Value;
+
+#define IS_BOOL(value)      ((value).type == VAL_BOOL)
+#define IS_NULL(value)      ((value).type == VAL_NULL)
+#define IS_NUMBER(value)    ((value).type == VAL_NUMBER)
+
+#define AS_BOOL(value)      ((value).as.boolean)
+#define AS_NUMBER(value)    ((value).as.number)
+
+#define BOOL_VAL(value)     ((Value) {VAL_BOOL, {.boolean = value}})
+#define NULL_VAL            ((Value) {VAL_NULL, {.number = 0}})
+#define NUMBER_VAL(value)   ((Value) {VAL_NUMBER, {.number = value}})
 
 typedef struct ValueArray_STRUCT{
     int capacity;
@@ -61,16 +88,39 @@ void freeValueArray(ValueArray *array) {
 }
 
 void printValue(Value value) {
-    printf("%g", value);
+    switch (value.type) {
+        case VAL_BOOL:      printf(AS_BOOL(value) ? "true" : "false"); break;
+        case VAL_NULL:      printf("null"); break;
+        case VAL_NUMBER:    printf("%g", AS_NUMBER(value)); break;
+    }
+}
+
+bool valuesEqual(Value a, Value b) {
+    if (a.type != b.type)
+        return false;
+
+    switch (a.type) {
+        case VAL_BOOL:      return AS_BOOL(a) == AS_BOOL(b);
+        case VAL_NULL:      return true;
+        case VAL_NUMBER:    return AS_NUMBER(a) == AS_NUMBER(b);
+        default:            return false;
+    }
 }
 
 typedef enum OpCode_ENUM {
     OP_CONSTANT,
     OP_CONSTANT_LONG,
+    OP_NULL,
+    OP_TRUE,
+    OP_FALSE,
+    OP_EQUAL,
+    OP_GREATER,
+    OP_LESS,
     OP_ADD,
     OP_SUBTRACT,
     OP_MULTIPLY,
     OP_DIVIDE,
+    OP_NOT,
     OP_NEGATE,
     OP_RETURN,
 } OpCode;
@@ -163,10 +213,17 @@ int disassembleInstruction(Chunk *chunk, int offset) {
     switch (instruction) {
         case OP_CONSTANT:       return constantInstruction("OP_CONSTANT", chunk, offset);
         case OP_CONSTANT_LONG:  return longConstantInstruction("OP_CONSTANT_LONG", chunk, offset);
+        case OP_NULL:           return simpleInstruction("OP_NULL", offset);
+        case OP_TRUE:           return simpleInstruction("OP_TRUE", offset);
+        case OP_FALSE:          return simpleInstruction("OP_FALSE", offset);
+        case OP_EQUAL:          return simpleInstruction("OP_EQUAL", offset);
+        case OP_GREATER:        return simpleInstruction("OP_GREATER", offset);
+        case OP_LESS:           return simpleInstruction("OP_LESS", offset);
         case OP_ADD:            return simpleInstruction("OP_ADD", offset);
         case OP_SUBTRACT:       return simpleInstruction("OP_SUBTRACT", offset);
         case OP_MULTIPLY:       return simpleInstruction("OP_MULTIPLY", offset);
         case OP_DIVIDE:         return simpleInstruction("OP_DIVIDE", offset);
+        case OP_NOT:            return simpleInstruction("OP_NOT", offset);
         case OP_NEGATE:         return simpleInstruction("OP_NEGATE", offset);
         case OP_RETURN:         return simpleInstruction("OP_RETURN", offset);
         default:
@@ -203,6 +260,19 @@ static void resetStack() {
     vm.stackTop = vm.stack;
 }
 
+static void runtimeError(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+    fputs("\n", stderr);
+
+    size_t instruction = vm.ip - vm.chunk->code - 1;
+    int line = vm.chunk->lines[instruction];
+    fprintf(stderr, "[line %d] in source\n", line);
+    resetStack();
+}
+
 void initVM() {
     resetStack();
 }
@@ -221,14 +291,26 @@ Value pop() {
     return *vm.stackTop;
 }
 
+static Value peek(int distance) {
+    return vm.stackTop[-1 - distance];
+}
+
+static bool isFalsey(Value value) {
+    return IS_NULL(value) || (IS_BOOL(value) && !AS_BOOL(value));
+}
+
 static InterpretResult run() {
     #define READ_BYTE() (*vm.ip++)
     #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
-    #define BINARY_OP(op) \
+    #define BINARY_OP(valueType, op) \
         do { \
-            Value b = pop(); \
-            Value a = pop(); \
-            push(a op b); \
+        if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
+            runtimeError("Operands must be numbers."); \
+            return INTERPRET_RUNTIME_ERROR; \
+        } \
+        double b = AS_NUMBER(pop()); \
+        double a = AS_NUMBER(pop()); \
+        push(valueType(a op b)); \
         } while (false)
 
     for (;;) {
@@ -250,11 +332,30 @@ static InterpretResult run() {
                 push(constant);
                 break;
             }
-            case OP_ADD:        BINARY_OP(+); break;
-            case OP_SUBTRACT:   BINARY_OP(-); break;
-            case OP_MULTIPLY:   BINARY_OP(*); break;
-            case OP_DIVIDE:     BINARY_OP(/); break;
-            case OP_NEGATE:     push(-pop()); break;
+            case OP_NULL:       push(NULL_VAL); break;
+            case OP_TRUE:       push(BOOL_VAL(true)); break;
+            case OP_FALSE:      push(BOOL_VAL(false)); break;
+            case OP_EQUAL: {
+                Value b = pop();
+                Value a = pop();
+                push(BOOL_VAL(valuesEqual (a, b)));
+                break;
+            }
+            case OP_GREATER:    BINARY_OP(BOOL_VAL, >); break;
+            case OP_LESS:       BINARY_OP(BOOL_VAL, <); break;
+            case OP_ADD:        BINARY_OP(NUMBER_VAL, +); break;
+            case OP_SUBTRACT:   BINARY_OP(NUMBER_VAL, -); break;
+            case OP_MULTIPLY:   BINARY_OP(NUMBER_VAL, *); break;
+            case OP_DIVIDE:     BINARY_OP(NUMBER_VAL, /); break;
+            case OP_NOT:        push(BOOL_VAL(isFalsey(pop()))); break;
+            case OP_NEGATE:     {
+                if (!IS_NUMBER(peek(0))) {
+                    runtimeError("Operand must be a number.");
+                    return INTERPRET_RUNTIME_ERROR;
+                } 
+                push(NUMBER_VAL(-AS_NUMBER(pop())));
+                break;
+            }
             case OP_RETURN: {
                 printValue(pop());
                 printf("\n");
@@ -274,24 +375,79 @@ InterpretResult interpret(Chunk *chunk) {
     return run();
 }
 
-int main(int argc, char **argv) {
-    initVM();
-
+InterpretResult runBytecode(const char *source) {
+    // TODO: convert bytecode to chunk
     Chunk chunk;
     initChunk(&chunk);
 
-
-    writeConstant(&chunk, 1.2, 123);
-    writeConstant(&chunk, 3.4, 123);
-    writeChunk(&chunk, OP_ADD, 123);
-    writeConstant(&chunk, 5.6, 123);
-    writeChunk(&chunk, OP_DIVIDE, 123);
-    writeChunk(&chunk, OP_NEGATE, 123); 
-    writeChunk(&chunk, OP_RETURN, 123);
+    writeConstant(&chunk, NUMBER_VAL(3), 123);
+    writeConstant(&chunk, NUMBER_VAL(2), 123);
+    writeChunk(&chunk, OP_MULTIPLY, 123);
+    writeConstant(&chunk, NUMBER_VAL(5), 123);
+    writeConstant(&chunk, NUMBER_VAL(4), 123);
+    writeChunk(&chunk, OP_SUBTRACT, 123);
+    writeChunk(&chunk, OP_LESS, 123);
+    writeChunk(&chunk, OP_FALSE, 124);
+    writeChunk(&chunk, OP_EQUAL, 124);
+    writeChunk(&chunk, OP_NULL, 124);
+    writeChunk(&chunk, OP_NOT, 124);
+    writeChunk(&chunk, OP_EQUAL, 124);
+    writeChunk(&chunk, OP_RETURN, 125);
 
     disassembleChunk(&chunk, "test chunk");
-    interpret(&chunk);
-    freeVM();
+    InterpretResult result = interpret(&chunk);
     freeChunk(&chunk);
+    return result;
+}
+
+static char *readFile(const char *path) {
+    FILE *file = fopen(path, "rb");
+
+    if (file == NULL) {
+        fprintf(stderr, "Could not open file '%s'.\n", path);
+        exit(74);
+    }
+
+    fseek(file, 0, SEEK_END);
+    size_t fileSize = ftell(file);
+    rewind(file);
+
+    char *buffer = (char *) malloc(fileSize + 1);
+    
+    if (buffer == NULL) {
+        fprintf(stderr, "Not enough memory to read file '%s'.\n", path);
+        exit(74);
+    }
+
+    size_t bytesRead = fread(buffer, sizeof(char), fileSize, file);
+    
+    if (bytesRead < fileSize) {
+        fprintf(stderr, "Could not read file '%s'.\n", path);
+        exit(74);
+    }
+    
+    buffer[bytesRead] = '\0';
+
+    fclose(file);
+    return buffer;
+}
+
+static void runFile(const char *path) {
+    char *source = readFile(path);
+    InterpretResult result = runBytecode(source);
+    free(source); 
+
+    if (result == INTERPRET_COMPILE_ERROR) 
+        exit(65);
+
+    if (result == INTERPRET_RUNTIME_ERROR) 
+        exit(70);
+}
+
+int main(int argc, char **argv) {
+    initVM();
+
+    runBytecode("");
+    freeVM();
     return 0;
 }
