@@ -122,27 +122,70 @@ class Type(Enum):
     VOID = "void"
     INT = "int"
     STR = "str"
+    
+iop = 0
+def get_iop() -> int:
+    global iop
+    ret = iop
+    iop += 1
+    return ret
+    
+class Op(Enum):
+    CONSTANT = get_iop()
+    CONSTANT_LONG = get_iop()
+    NULL = get_iop()
+    TRUE = get_iop()
+    FALSE = get_iop()
+    EQUAL = get_iop()
+    GREATER = get_iop()
+    LESS = get_iop()
+    ADD = get_iop()
+    SUBTRACT = get_iop()
+    MULTIPLY = get_iop()
+    DIVIDE = get_iop()
+    NOT = get_iop()
+    NEGATE = get_iop()
+    RETURN = get_iop()
         
 @dataclass
 class AST:
-    pass
+    def generate(self, opcodes: list[Op], constants: list[float]) -> tuple[list[Op], list[float]]:
+        return opcodes, constants
 
 @dataclass
 class SymbolExpr(AST):
     symbol: str
     
+    def generate(self, opcodes: list[Op], constants: list[float]) -> tuple[list[Op], list[float]]:
+        return opcodes, constants
+    
 @dataclass
 class NumberExpr(AST):
     value: float
+    
+    def generate(self, opcodes: list[Op], constants: list[float]) -> tuple[list[Op], list[float]]:
+        opcodes.extend([Op.CONSTANT, len(constants)])
+        constants.append(self.value)
+        return opcodes, constants
 
 @dataclass
 class StringExpr(AST):
     value: str
+    
+    def generate(self, opcodes: list[Op], constants: list[float]) -> tuple[list[Op], list[float]]:
+        return opcodes, constants
 
 @dataclass
 class UnaryExpr(AST):
     op: str
     expr: AST
+    
+    def generate(self, opcodes: list[Op], constants: list[float]) -> tuple[list[Op], list[float]]:
+        opcodes, generate = self.expr.generate(opcodes, constants)
+        match self.op:
+            case '-': opcodes.append(Op.NEGATE)
+            case '!': opcodes.append(Op.NOT)
+        return opcodes, constants
 
 @dataclass
 class BinaryExpr(AST):
@@ -150,15 +193,31 @@ class BinaryExpr(AST):
     LHS: AST
     RHS: AST
     
+    def generate(self, opcodes: list[Op], constants: list[float]) -> tuple[list[Op], list[float]]:
+        opcodes, constants = self.LHS.generate(opcodes, constants)
+        opcodes, constants  = self.RHS.generate(opcodes, constants)
+        match self.op:
+            case '+': opcodes.append(Op.ADD)
+            case '-': opcodes.append(Op.SUBTRACT)
+            case '*': opcodes.append(Op.MULTIPLY)
+            case '/': opcodes.append(Op.DIVIDE)
+        return opcodes, constants
+    
 @dataclass
 class Variable(AST):
     type: Type
     symbol: str
     value: AST
     
+    def generate(self, opcodes: list[Op], constants: list[float]) -> tuple[list[Op], list[float]]:
+        return opcodes, constants
+    
 @dataclass
 class CodeBlock(AST):
     body: list[AST]
+    
+    def generate(self, opcodes: list[Op], constants: list[float]) -> tuple[list[Op], list[float]]:
+        return opcodes, constants
 
 @dataclass
 class Function(AST):
@@ -167,9 +226,17 @@ class Function(AST):
     parameters: list[Variable]
     body: AST # code block or single statement
     
+    def generate(self, opcodes: list[Op], constants: list[float]) -> tuple[list[Op], list[float]]:
+        return opcodes, constants
+    
 @dataclass
 class Root(AST):
     program: list[AST]
+    
+    def generate(self, opcodes: list[Op] = [], constants: list[float] = []) -> tuple[list[Op], list[float]]:
+        for stmt in self.program:
+            opcodes, constants = stmt.generate(opcodes, constants)
+        return opcodes, constants
 
 class Parser:
     def __init__(self, tokens: list[Token]) -> None:
@@ -263,70 +330,8 @@ def debug(ast: Root) -> None:
     for id, stmt in enumerate(ast.program):
         print(id, '|', end=" ")
         pprint(stmt)
-        # if isinstance(stmt, Function):
-        #     print(stmt.type, stmt.symbol, "(", pformat(stmt.parameters), ")\n  |", end=" ")
-        #     pprint(stmt.body)
-        # elif isinstance(stmt, BinaryExpr):
-        #     pprint(stmt.LHS)
-        #     print(stmt.op)
-        #     pprint(stmt.RHS)
-            
-iop = 0
-def get_iop() -> int:
-    global iop
-    ret = iop
-    iop += 1
-    return ret
-    
-class Op(Enum):
-    CONSTANT = get_iop()
-    CONSTANT_LONG = get_iop()
-    NULL = get_iop()
-    TRUE = get_iop()
-    FALSE = get_iop()
-    EQUAL = get_iop()
-    GREATER = get_iop()
-    LESS = get_iop()
-    ADD = get_iop()
-    SUBTRACT = get_iop()
-    MULTIPLY = get_iop()
-    DIVIDE = get_iop()
-    NOT = get_iop()
-    NEGATE = get_iop()
-    RETURN = get_iop()
-    
-
-def generate(node: AST, constants) -> tuple[list[Op], list[float]]:
-    opcodes = []
-    constants = constants
-    if (isinstance(node, Root)):
-        for stmt in node.program:
-            _ops, constants = generate(stmt, constants)
-            opcodes.extend(_ops)
-    elif (isinstance(node, BinaryExpr)):
-        _ops, constants = generate(node.LHS, constants)
-        opcodes.extend(_ops)
-        _ops, constants = generate(node.RHS, constants)
-        opcodes.extend(_ops)
-        match node.op:
-            case '+':   opcodes.append(Op.ADD)
-            case '-':   opcodes.append(Op.SUBTRACT)      
-            case '*':   opcodes.append(Op.MULTIPLY)
-            case '/':   opcodes.append(Op.DIVIDE)
-            case '%':   assert False, "not implemented"
-    elif (isinstance(node, UnaryExpr)):
-        opcodes.extend(generate(node.expr)) 
-        match node.op:
-            case '-':   opcodes.append(Op.NEGATE)
-            case '!':   opcodes.append(Op.NOT)
-    elif (isinstance(node, NumberExpr)):
-        id = len(constants)
-        constants.append(node.value)
-        opcodes.extend([Op.CONSTANT, id])
-    return opcodes, constants
-                    
 
 debug(root)
-opcodes, constants = generate(root, [])
+opcodes, constants = root.generate()
 pprint(opcodes)
 pprint(constants)
