@@ -349,21 +349,23 @@ with open("main.nco", "wb") as out:
     out.write(bytearray([0xc0, 0xff, 0xee]))
     out.write(bytearray(opcodes))
     
-# with open("main.nco", "rb") as file:
-#     src = file.read()
-#     current = None
-#     i = 0
-#     while src[i] != 0xc0 and src[i+1] != 0xff and src[i+2] != 0xee:
-#         i += 1
-#     i += 3
-#     while i < len(src):
-#         if src[i] == Op.CONSTANT:
-#             i += 1
-#             print("CONST", src[i])
-#         elif src[i] == Op.NEGATE:
-#             print("NEGATE")
-#         elif src[i] == Op.ADD:
-#             print("ADD")
-#         else:
-#             print(hex(src[i]))
-#         i += 1
+with open("main.nco", "rb") as file:
+    from struct import unpack
+    src = file.read()
+    current = None
+    i = 0
+    while src[i] != 0xc0 and src[i+1] != 0xff and src[i+2] != 0xee:
+        print(hex(src[i]))
+        i += 1
+    i += 3
+    while i < len(src):
+        if src[i] == Op.CONSTANT:
+            i += 1
+            print("CONST", src[i])
+        elif src[i] == Op.NEGATE:
+            print("NEGATE")
+        elif src[i] == Op.ADD:
+            print("ADD")
+        else:
+            print(hex(src[i]))
+        i += 1

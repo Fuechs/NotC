@@ -381,10 +381,21 @@ InterpretResult runBytecode(const char *source) {
     initChunk(&chunk);
 
     size_t i = 0;
-    double constants[] = { 1.0, 1.0 };
+    double constants[256] = {};
+    size_t constants_size = 0;    
     for (;source[i] != (char) 0xc0 
         && source[i + 1] != (char)0xff 
-        && source[i + 2] != (char)0xee; i++);
+        && source[i + 2] != (char)0xee; i += 4) {
+            union {
+                float _value;
+                char bytes[4];
+            } val;
+            val.bytes[0] = source[i];
+            val.bytes[1] = source[i + 1];
+            val.bytes[2] = source[i + 2];
+            val.bytes[3] = source[i + 3];
+            constants[constants_size++] = val._value;
+        }  
     i += 3;
 
     for (;source[i - 1] != OP_RETURN; i++) 
