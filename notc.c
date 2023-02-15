@@ -380,19 +380,18 @@ InterpretResult runBytecode(const char *source) {
     Chunk chunk;
     initChunk(&chunk);
 
-    writeConstant(&chunk, NUMBER_VAL(3), 123);
-    writeConstant(&chunk, NUMBER_VAL(2), 123);
-    writeChunk(&chunk, OP_MULTIPLY, 123);
-    writeConstant(&chunk, NUMBER_VAL(5), 123);
-    writeConstant(&chunk, NUMBER_VAL(4), 123);
-    writeChunk(&chunk, OP_SUBTRACT, 123);
-    writeChunk(&chunk, OP_LESS, 123);
-    writeChunk(&chunk, OP_FALSE, 124);
-    writeChunk(&chunk, OP_EQUAL, 124);
-    writeChunk(&chunk, OP_NULL, 124);
-    writeChunk(&chunk, OP_NOT, 124);
-    writeChunk(&chunk, OP_EQUAL, 124);
-    writeChunk(&chunk, OP_RETURN, 125);
+    size_t i = 0;
+    double constants[] = { 1.0, 1.0 };
+    for (;source[i] != (char) 0xc0 
+        && source[i + 1] != (char)0xff 
+        && source[i + 2] != (char)0xee; i++);
+    i += 3;
+
+    for (;source[i - 1] != OP_RETURN; i++) 
+        switch (source[i]) {
+            case OP_CONSTANT:       writeConstant(&chunk, NUMBER_VAL(constants[source[++i]]), 0); break;
+            default:                writeChunk(&chunk, (uint8_t) source[i], 0);                 
+        }
 
     disassembleChunk(&chunk, "test chunk");
     InterpretResult result = interpret(&chunk);
@@ -446,8 +445,8 @@ static void runFile(const char *path) {
 
 int main(int argc, char **argv) {
     initVM();
-
-    runBytecode("");
+    runFile("main.nco");
+    // runBytecode("");
     freeVM();
     return 0;
 }

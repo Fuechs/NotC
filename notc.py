@@ -116,7 +116,7 @@ def read_file(path: str) -> str:
     with open(path, 'r') as file:
         return file.read()
     
-from enum import Enum
+from enum import Enum, IntEnum
 
 class Type(Enum):
     VOID = "void"
@@ -130,7 +130,7 @@ def get_iop() -> int:
     iop += 1
     return ret
     
-class Op(Enum):
+class Op(IntEnum):
     CONSTANT = get_iop()
     CONSTANT_LONG = get_iop()
     NULL = get_iop()
@@ -333,5 +333,37 @@ def debug(ast: Root) -> None:
 
 debug(root)
 opcodes, constants = root.generate()
+opcodes.append(Op.RETURN)
 pprint(opcodes)
 pprint(constants)
+
+def get_bytes(constants: list[float]) -> bytearray:
+    from struct import pack
+    _bytes = []
+    for constant in constants:
+        _bytes.extend(pack("f", constant))
+    return bytearray(_bytes)
+
+with open("main.nco", "wb") as out:
+    out.write(get_bytes(constants))
+    out.write(bytearray([0xc0, 0xff, 0xee]))
+    out.write(bytearray(opcodes))
+    
+# with open("main.nco", "rb") as file:
+#     src = file.read()
+#     current = None
+#     i = 0
+#     while src[i] != 0xc0 and src[i+1] != 0xff and src[i+2] != 0xee:
+#         i += 1
+#     i += 3
+#     while i < len(src):
+#         if src[i] == Op.CONSTANT:
+#             i += 1
+#             print("CONST", src[i])
+#         elif src[i] == Op.NEGATE:
+#             print("NEGATE")
+#         elif src[i] == Op.ADD:
+#             print("ADD")
+#         else:
+#             print(hex(src[i]))
+#         i += 1
