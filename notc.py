@@ -22,6 +22,8 @@ PLUS = tok()
 MINUS = tok()
 STAR = tok()
 SLASH = tok()
+EQUAL = tok()
+EQUALS = tok()
 
 @dataclass
 class Token:
@@ -72,6 +74,13 @@ def lex_line(id: int, line: str) -> list[Token]:
             tokens.append(STAR, id, idx + 1, '*')
         elif c() == '/':
             tokens.append(SLASH, id, idx + 1, '/')
+        elif c() == '=':
+            if c(1) == '=':
+                tokens.append(Token(EQUALS, id, idx + 1, "=="))
+                idx += 1
+            else:
+                tokens.append(Token(EQUAL, id, idx + 1, "="))
+            idx += 1
         elif c() == '"':
             col = idx
             lexeme = ""
@@ -158,6 +167,14 @@ class SymbolExpr(AST):
     
     def generate(self, opcodes: list[Op], constants: list[float]) -> tuple[list[Op], list[float]]:
         return opcodes, constants
+   
+@dataclass 
+class BooleanExpr(AST):
+    value: bool
+    
+    def generate(self, opcodes: list[Op], constants: list[float]) -> tuple[list[Op], list[float]]:
+        opcodes.append(Op.TRUE if self.value is True else Op.FALSE)
+        return opcodes, constants
     
 @dataclass
 class NumberExpr(AST):
@@ -201,6 +218,7 @@ class BinaryExpr(AST):
             case '-': opcodes.append(Op.SUBTRACT)
             case '*': opcodes.append(Op.MULTIPLY)
             case '/': opcodes.append(Op.DIVIDE)
+            case "==": opcodes.append(Op.EQUAL)
         return opcodes, constants
     
 @dataclass
@@ -280,11 +298,19 @@ class Parser:
         return Function(type, symbol, [], body)
     
     def parseExpr(self):
-        return self.parseAdditiveExpr()
+        return self.parseComparsionExpr()
+    
+    def parseComparsionExpr(self):
+        LHS = self.parseAdditiveExpr()
+        while self.c() == "==":
+            op = self.eat()
+            RHS = self.parseAdditiveExpr()
+            LHS = BinaryExpr(op, LHS, RHS)
+        return LHS
     
     def parseAdditiveExpr(self):
         LHS = self.parseMultiplicativeExpr()
-        while (self.c() == '+' or self.c() == '-'):
+        while self.c() == '+' or self.c() == '-':
             op = self.eat()
             RHS = self.parseMultiplicativeExpr()
             LHS = BinaryExpr(op, LHS, RHS)
@@ -292,7 +318,7 @@ class Parser:
     
     def parseMultiplicativeExpr(self):
         LHS = self.parseUnaryExpr()
-        while (self.c() == '*' or self.c() == '/'):
+        while self.c() == '*' or self.c() == '/':
             op = self.eat()
             RHS = self.parseUnaryExpr()
             LHS = BinaryExpr(op, LHS, RHS)
@@ -309,6 +335,10 @@ class Parser:
         if token.type == NUMBER:
             return NumberExpr(float(token.value))
         elif token.type == IDENTIFIER:
+            if token.value == "true": 
+                return BooleanExpr(True)
+            if token.value == "false": 
+                return BooleanExpr(False)
             return SymbolExpr(token.value)
         elif token.type == STRING:
             return StringExpr(token.value)
@@ -355,17 +385,25 @@ with open("main.nco", "rb") as file:
     current = None
     i = 0
     while src[i] != 0xc0 and src[i+1] != 0xff and src[i+2] != 0xee:
-        print(hex(src[i]))
-        i += 1
+        # print(hex(src[i]))
+        i += 4
     i += 3
     while i < len(src):
         if src[i] == Op.CONSTANT:
             i += 1
             print("CONST", src[i])
+        elif src[i] == Op.TRUE:
+            print("TRUE")
+        elif src[i] == Op.FALSE:
+            print("FALSE")
         elif src[i] == Op.NEGATE:
             print("NEGATE")
         elif src[i] == Op.ADD:
             print("ADD")
+        elif src[i] == Op.EQUAL:
+            print("EQUAL")
+        elif src[i] == Op.RETURN:
+            print("RETURN")
         else:
             print(hex(src[i]))
         i += 1
