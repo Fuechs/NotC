@@ -71,9 +71,11 @@ def lex_line(id: int, line: str) -> list[Token]:
                 tokens.append(Token(MINUS, id, idx + 1, '-'))
             idx += 1
         elif c() == '*':
-            tokens.append(STAR, id, idx + 1, '*')
+            tokens.append(Token(STAR, id, idx + 1, '*'))
+            idx += 1
         elif c() == '/':
-            tokens.append(SLASH, id, idx + 1, '/')
+            tokens.append(Token(SLASH, id, idx + 1, '/'))
+            idx += 1
         elif c() == '=':
             if c(1) == '=':
                 tokens.append(Token(EQUALS, id, idx + 1, "=="))
@@ -104,9 +106,13 @@ def lex_line(id: int, line: str) -> list[Token]:
             col = idx
             lexeme = c()
             idx += 1
-            while idx < len(line) and c().isdigit():
+            while idx < len(line) and c().isdigit() or c() == '.':
                 lexeme += c()
                 idx += 1
+                if c(-1) == '.':
+                    while idx < len(line) and c().isdigit():
+                        lexeme += c()
+                        idx += 1
             tokens.append(Token(NUMBER, idx, col, lexeme))
         elif c().isspace():
             idx += 1
@@ -400,6 +406,12 @@ with open("main.nco", "rb") as file:
             print("NEGATE")
         elif src[i] == Op.ADD:
             print("ADD")
+        elif src[i] == Op.SUBTRACT:
+            print("SUBTRACT")
+        elif src[i] == Op.MULTIPLY:
+            print("MULTIPLY")
+        elif src[i] == Op.DIVIDE:
+            print("DIVIDE")
         elif src[i] == Op.EQUAL:
             print("EQUAL")
         elif src[i] == Op.RETURN:
